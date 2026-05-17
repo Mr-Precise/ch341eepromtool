@@ -1,10 +1,10 @@
 //
-//   ch341eeprom programmer version 0.1 (Beta) 
+//   ch341eeprom programmer
 //
 //   Programming tool for the 24Cxx serial EEPROMs using the Winchiphead CH341A IC
 //
-//   (c) December 2011 asbokid <ballymunboy@gmail.com> 
-//     
+//   (c) December 2011 asbokid <ballymunboy@gmail.com>, extended by Precise
+//
 //   This program is free software: you can redistribute it and/or modify
 //   it under the terms of the GNU General Public License as published by
 //   the Free Software Foundation, either version 3 of the License, or
@@ -18,13 +18,12 @@
 //   You should have received a copy of the GNU General Public License
 //   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <libusb-1.0/libusb.h> 
+#include <libusb-1.0/libusb.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <inttypes.h>
 #include <getopt.h>
 #include "ch341eeprom.h"
 
@@ -37,30 +36,51 @@
 FILE *debugout, *verbout;
 uint8_t *readbuf = NULL;
 
+// EEPROM database
+const struct EEPROM eepromlist[] = {
+    { "24c01",   128,    8, 1, 0 },
+    { "24c02",   256,    8, 1, 0 },
+    { "24c04",   512,   16, 1, 0 },
+    { "24c08",  1024,   16, 1, 0 },
+    { "24c16",  2048,   16, 1, 0 },
+    { "24c32",  4096,   32, 2, 0 },
+    { "24c64",  8192,   32, 2, 0 },
+    { "24c128",16384,   32, 2, 0 },
+    { "24c256",32768,   32, 2, 0 },
+    { "24c512",65536,   32, 2, 0 },
+    { "24c1024",131072, 32, 2, 0 },
+    { 0, 0, 0, 0, 0 }
+};
+
 int main(int argc, char **argv) {
-    int i, eepromsize = 0, bytesread = 0;
-    uint8_t debug = FALSE, verbose = FALSE;
+    int eepromsize = 0, bytesread = 0;
+    uint8_t debug = 0, verbose = 0;
     struct libusb_device_handle *devHandle = NULL;
-    char *filename = NULL, eepromname[12], operation = 0;
+    char *filename = NULL, eepromname[12] = {0};
+    char operation = 0;
+    uint32_t speed = CH341_I2C_STANDARD_SPEED;
+    struct EEPROM eeprom_info;
     FILE *fp;
 
-    static char version_msg[] =    
-        "ch341eeprom - an i2c EEPROM programming tool for the WCH CH341a IC\n" \
-        "Version " CH341TOOLVERSION  " copyright (c) 2011  asbokid <ballymunboy@gmail.com>\n\n" \
-        "This program comes with absolutely no warranty; This is free software,\n" \
-        "and you are welcome to redistribute it under certain conditions:\n" \
-        "GNU GPL v3 License: http://www.gnu.org/licenses/gpl.html\n";
+    static char version_msg[] =
+        "ch341eeprom - I2C EEPROM programmer for CH341a\n"
+        "Version " CH341TOOLVERSION " (c) 2011 asbokid, extended by Precise\n\n"
+        "This program comes with ABSOLUTELY NO WARRANTY.\n"
+        "This is free software, and you are welcome to redistribute it\n"
+        "under the terms of the GNU GPL v3.\n";
 
-    static char usage_msg[] = 
-        "Usage:\n" \
-        " -h, --help             display this text\n" \
-        " -v, --verbose          verbose output\n" \
-        " -d, --debug            debug output\n" \
-        " -s, --size             size of EEPROM {24c32|24c64}\n" \
-        " -e, --erase            erase EEPROM (fill with 0xff)\n" \
-        " -w, --write <filename> write EEPROM with image from filename\n" \
-        " -r, --read  <filename> read EEPROM and save image to filename\n\n" \
-        "Example:  ch341eeprom -v -s 24c64 -w bootrom.bin\n";
+    static char usage_msg[] =
+        "Usage: %s [options]\n"
+        "  -h, --help               show this help\n"
+        "  -v, --verbose            verbose output\n"
+        "  -d, --debug              debug output\n"
+        "  -s, --size <model>       EEPROM model (24c01 .. 24c1024)\n"
+        "  -e, --erase              erase EEPROM (fill with 0xFF)\n"
+        "  -p, --speed <low|fast|high>  set I2C speed (default standard 100kHz)\n"
+        "  -w, --write <file>       write EEPROM from file\n"
+        "  -r, --read  <file>       read EEPROM to file\n"
+        "  -V, --verify <file>      verify EEPROM against file\n"
+        "\nExample: %s -v -s 24c64 -w image.bin\n";
 
     static struct option longopts[] = {
         {"help",    no_argument,       0, 'h'},
@@ -68,174 +88,143 @@ int main(int argc, char **argv) {
         {"debug",   no_argument,       0, 'd'},
         {"erase",   no_argument,       0, 'e'},
         {"size",    required_argument, 0, 's'},
-        {"read",    required_argument, 0, 'r'},
+        {"speed",   required_argument, 0, 'p'},
         {"write",   required_argument, 0, 'w'},
-        {0, 0, 0, 0}
+        {"read",    required_argument, 0, 'r'},
+        {"verify",  required_argument, 0, 'V'},
+        {0,0,0,0}
     };
 
-    while (TRUE) {
-        int32_t optidx = 0;
-        int8_t c = getopt_long(argc,argv,"hvdes:w:r:", longopts, &optidx);
-        if (c == -1)
-            break;
-
+    while (1) {
+        int c = getopt_long(argc, argv, "hvdes:p:w:r:V:", longopts, NULL);
+        if (c == -1) break;
         switch (c) {
-            case 'h': fprintf(stdout, "%s\n%s", version_msg, usage_msg);
-                      return 0;
-            case 'v': verbose = TRUE;
-                      break;
-            case 'd': debug = TRUE;
-                      break;
-            case 's': if((eepromsize = parseEEPsize(optarg)) > 0)
-                        strncpy(eepromname, optarg, 10);
-                      break;
-            case 'e': if(!operation)
-                        operation = 'e';
-                      else {
-                        fprintf(stderr, "Conflicting command line options\n");
-                        goto shutdown;
-                      }
-                      break;
-            case 'r': if(!operation) {
-                        operation = 'r';
-                        filename = (char *) malloc(strlen(optarg)+1);
-                        strcpy(filename, optarg);
-                      } else {
-                        fprintf(stderr, "Conflicting command line options\n");
-                        goto shutdown;
-                      }
-                      break;
-            case 'w': if(!operation) {
-                        operation = 'w';
-                        filename = (char *) malloc(strlen(optarg)+1);
-                        strcpy(filename, optarg);
-                      } else {
-                        fprintf(stderr, "Conflicting command line options\n");
-                        goto shutdown;
-                      }  
-                      break;
-            default :  
-            case '?': fprintf(stdout, "%s", version_msg);
-                      fprintf(stderr, "%s", usage_msg);
-                      goto shutdown;
+            case 'h':
+                printf("%s", version_msg);
+                printf(usage_msg, argv[0], argv[0]);
+                return 0;
+            case 'v': verbose = 1; break;
+            case 'd': debug = 1; break;
+            case 'e': if (!operation) operation = 'e'; else goto conflict; break;
+            case 's':
+                if ((eepromsize = parseEEPsize(optarg, &eeprom_info)) > 0)
+                    strncpy(eepromname, optarg, 11);
+                break;
+            case 'p':
+                if (strcmp(optarg, "low") == 0) speed = CH341_I2C_LOW_SPEED;
+                else if (strcmp(optarg, "fast") == 0) speed = CH341_I2C_FAST_SPEED;
+                else if (strcmp(optarg, "high") == 0) speed = CH341_I2C_HIGH_SPEED;
+                else speed = CH341_I2C_STANDARD_SPEED;
+                break;
+            case 'w':
+                if (!operation) { operation = 'w'; filename = strdup(optarg); }
+                else goto conflict;
+                break;
+            case 'r':
+                if (!operation) { operation = 'r'; filename = strdup(optarg); }
+                else goto conflict;
+                break;
+            case 'V':
+                if (!operation) { operation = 'V'; filename = strdup(optarg); }
+                else goto conflict;
+                break;
+            default:
+                fprintf(stderr, usage_msg, argv[0], argv[0]);
+                return 1;
         }
     }
-
-    debugout = (debug == TRUE) ? stdout : fopen(NULL_DEVICE,"w");
-    verbout = (verbose == TRUE) ? stdout : fopen(NULL_DEVICE,"w");
-    fprintf(debugout, "Debug Enabled\n"); 
-
-    if(!operation) {        
-        fprintf(stderr, "%s\n%s", version_msg, usage_msg);
-        goto shutdown;
-    } 
-    
-    if(eepromsize <= 0) {
-        fprintf(stderr, "Invalid EEPROM size\n");
-        goto shutdown;
+    if (operation == 0 || eepromsize <= 0) {
+        fprintf(stderr, "Missing operation or EEPROM size\n");
+        fprintf(stderr, usage_msg, argv[0], argv[0]);
+        return 1;
     }
 
-    readbuf = (uint8_t *) malloc(MAX_EEPROM_SIZE);   // space to store loaded EEPROM
-    if(!readbuf) {
-        fprintf(stderr, "Couldnt malloc space needed for EEPROM image\n");
-        goto shutdown;
-    }
+    debugout = debug ? stdout : fopen(NULL_DEVICE, "w");
+    verbout  = verbose ? stdout : fopen(NULL_DEVICE, "w");
 
-    if(!(devHandle = ch341configure(USB_LOCK_VENDOR, USB_LOCK_PRODUCT))) {
-        fprintf(stderr, "Couldn't configure USB device %04x:%04x\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
-        goto shutdown;
-    }
-    fprintf(verbout, "Configured USB device %04x:%04x\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
+    readbuf = malloc(MAX_EEPROM_SIZE);
+    if (!readbuf) { perror("malloc"); return 1; }
 
-    if(ch341setstream(devHandle, CH341_I2C_STANDARD_SPEED) < 0) {
-        fprintf(stderr, "Couldn't set i2c bus speed\n");
-        goto shutdown;
-    }
-    fprintf(verbout, "Set i2c bus speed to [100kHz]\n");
+    devHandle = ch341configure(USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
+    if (!devHandle) goto err;
 
-    switch(operation) {
+    if (ch341setstream(devHandle, speed) < 0) goto err;
+
+    static const char *speed_names[] = { "20", "100", "400", "750" };
+    fprintf(verbout, "I2C speed set to %s kHz\n", speed_names[speed]);
+
+    switch (operation) {
         case 'r':   // read
-            memset(readbuf, 0xff, MAX_EEPROM_SIZE);
-
-            if(ch341readEEPROM(devHandle, readbuf, eepromsize) < 0) {
-                fprintf(stderr, "Couldnt read [%d] bytes from [%s] EEPROM\n", eepromsize, eepromname);
-                goto shutdown;
-            }
-            fprintf(stdout, "Read [%d] bytes from [%s] EEPROM\n", eepromsize, eepromname);
-            for(i=0;i<eepromsize;i++) {
-                if(!(i%16))
-                    fprintf(debugout, "\n%04x: ", i);
-                fprintf(debugout, "%02x ", readbuf[i]);
-            }
-            fprintf(debugout, "\n");
-
-            if(!(fp=fopen(filename, "wb"))) {
-                fprintf(stderr, "Couldnt open file [%s] for writing\n", filename);
-                goto shutdown;
-            }
-
+            memset(readbuf, 0xFF, eepromsize);
+            if (ch341readEEPROM(devHandle, readbuf, eepromsize) < 0) goto err;
+            fp = fopen(filename, "wb");
+            if (!fp) { perror("fopen write"); goto err; }
             fwrite(readbuf, 1, eepromsize, fp);
-            if(ferror(fp)) {
-                fprintf(stderr, "Error writing file [%s]\n", filename);
-                if(fp)
-                    fclose(fp);
-                goto shutdown;
-            }
             fclose(fp);
-            fprintf(stdout, "Wrote [%d] bytes to file [%s]\n", eepromsize, filename);
+            printf("Read %d bytes to %s\n", eepromsize, filename);
             break;
         case 'w':   // write
-            if(!(fp=fopen(filename, "rb"))) {
-                fprintf(stderr, "Couldnt open file [%s] for reading\n", filename);
-                goto shutdown;
-            }
-            memset(readbuf, 0xff, MAX_EEPROM_SIZE);
+            fp = fopen(filename, "rb");
+            if (!fp) { perror("fopen read"); goto err; }
             bytesread = fread(readbuf, 1, MAX_EEPROM_SIZE, fp);
-            if(ferror(fp)) {
-                fprintf(stderr, "Error reading file [%s]\n", filename);
-                if(fp)
-                    fclose(fp);
-                goto shutdown;
-            }
             fclose(fp);
-            fprintf(stdout, "Read [%d] bytes from file [%s]\n", bytesread, filename);
-        
-            if(bytesread < eepromsize)
-                fprintf(stdout, "Padded to [%d] bytes for [%s] EEPROM\n", eepromsize, eepromname);
-
-            if(bytesread > eepromsize)
-                fprintf(stdout, "Truncated to [%d] bytes for [%s] EEPROM\n", eepromsize, eepromname);
-
-            if(ch341writeEEPROM(devHandle, readbuf, eepromsize) < 0) {
-                fprintf(stderr,"Failed to write [%d] bytes from [%s] to [%s] EEPROM\n", eepromsize, filename, eepromname);
-                goto shutdown;
-            }
-            fprintf(stdout, "Wrote [%d] bytes to [%s] EEPROM\n", eepromsize, eepromname);
+            if (bytesread < eepromsize) printf("Padding to %d bytes\n", eepromsize);
+            if (bytesread > eepromsize) printf("Truncating to %d bytes\n", eepromsize);
+            if (ch341writeEEPROM(devHandle, readbuf, eepromsize) < 0) goto err;
+            printf("Wrote %d bytes to %s\n", eepromsize, eepromname);
             break;
-        case 'e': // erase
-            memset(readbuf, 0xff, MAX_EEPROM_SIZE);
-            if(ch341writeEEPROM(devHandle, readbuf, eepromsize) < 0) {
-                fprintf(stderr,"Failed to erase [%d] bytes of [%s] EEPROM\n", eepromsize, eepromname);
-                goto shutdown;
+        case 'e':   // erase
+            memset(readbuf, 0xFF, eepromsize);
+            if (ch341writeEEPROM(devHandle, readbuf, eepromsize) < 0) goto err;
+            printf("Erased %s (%d bytes)\n", eepromname, eepromsize);
+            break;
+        case 'V':   // verify
+            memset(readbuf, 0xFF, eepromsize);
+            if (ch341readEEPROM(devHandle, readbuf, eepromsize) < 0) goto err;
+            fp = fopen(filename, "rb");
+            if (!fp) { perror("fopen verify"); goto err; }
+            uint8_t *filebuf = malloc(eepromsize);
+            if (!filebuf) { perror("malloc"); fclose(fp); goto err; }
+            size_t n = fread(filebuf, 1, eepromsize, fp);
+            fclose(fp);
+            if (n != (size_t)eepromsize) {
+                fprintf(stderr, "File size mismatch (%zu vs %d)\n", n, eepromsize);
+                free(filebuf);
+                goto err;
             }
-            fprintf(stdout, "Erased [%d] bytes of [%s] EEPROM\n", eepromsize, eepromname);
+            int mismatch = 0;
+            for (int i = 0; i < eepromsize; i++) {
+                if (readbuf[i] != filebuf[i]) {
+                    printf("Verify failed at offset %d: EEPROM=0x%02X, file=0x%02X\n",
+                           i, readbuf[i], filebuf[i]);
+                    mismatch = 1;
+                    break;
+                }
+            }
+            if (!mismatch) printf("Verification passed (%d bytes)\n", eepromsize);
+            free(filebuf);
             break;
         default:
-            fprintf(stderr, "Unknown option\n");
-            goto shutdown;
-        }
+            fprintf(stderr, "Unknown operation\n");
+            goto err;
+    }
 
-shutdown:
-    if(readbuf)
-        free(readbuf);
-    if(filename)
-        free(filename);
-    if(devHandle) {
-        libusb_release_interface(devHandle, DEFAULT_INTERFACE);
-        fprintf(debugout, "Released device interface [%d]\n", DEFAULT_INTERFACE);
+    libusb_release_interface(devHandle, 0);
+    libusb_close(devHandle);
+    libusb_exit(NULL);
+    free(readbuf);
+    if (filename) free(filename);
+    return 0;
+
+conflict:
+    fprintf(stderr, "Conflicting options\n");
+err:
+    if (readbuf) free(readbuf);
+    if (filename) free(filename);
+    if (devHandle) {
+        libusb_release_interface(devHandle, 0);
         libusb_close(devHandle);
-        fprintf(verbout, "Closed USB device\n");
         libusb_exit(NULL);
     }
-    return 0;
+    return 1;
 }
