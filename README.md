@@ -35,7 +35,7 @@ Basic build:
 `make`
 
 Build with test image generator:  
-`make BUILD_MKTESTIMG=1
+`make BUILD_MKTESTIMG=1`
 
 Install (may require superuser):  
 `sudo make install`
