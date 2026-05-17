@@ -32,7 +32,7 @@ FILE *debugout, *verbout;
 uint8_t *readbuf = NULL;
 
 int main(int argc, char **argv) {
-    int i, ret = 0, eepromsize = 0, bytesread = 0;
+    int i, eepromsize = 0, bytesread = 0;
     uint8_t debug = FALSE, verbose = FALSE;
     struct libusb_device_handle *devHandle = NULL;
     char *filename = NULL, eepromname[12], operation = 0;
@@ -136,10 +136,10 @@ int main(int argc, char **argv) {
     }
 
     if(!(devHandle = ch341configure(USB_LOCK_VENDOR, USB_LOCK_PRODUCT))) {
-        fprintf(stderr, "Couldnt configure USB device\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
+        fprintf(stderr, "Couldn't configure USB device %04x:%04x\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
         goto shutdown;
     }
-    fprintf(verbout, "Configured USB device\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
+    fprintf(verbout, "Configured USB device %04x:%04x\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
 
     if(ch341setstream(devHandle, CH341_I2C_STANDARD_SPEED) < 0) {
         fprintf(stderr, "Couldnt set i2c bus speed\n");

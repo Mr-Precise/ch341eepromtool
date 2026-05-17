@@ -30,7 +30,7 @@ extern FILE *debugout, *verbout;
 uint32_t getnextpkt;                            // set by the callback function
 uint32_t syncackpkt;                            // synch / ack flag used by BULK OUT cb function
 uint16_t byteoffset;
-uint8_t *readbuf;
+extern uint8_t *readbuf;
 
 // --------------------------------------------------------------------------
 // ch341configure()
@@ -45,13 +45,11 @@ struct libusb_device_handle *ch341configure(uint16_t vid, uint16_t pid) {
 
     struct libusb_device *dev;
     struct libusb_device_handle *devHandle;
-    int32_t ret=0, ret2 = 0;                    // set to < 0 to indicate USB errors
-    uint32_t i = 0, j = 0;
+    int32_t ret = 0;                    // set to < 0 to indicate USB errors
+    uint32_t i = 0;
     int32_t currentConfig = 0;
 
     uint8_t  ch341DescriptorBuffer[0x12];
-    uint8_t  ch341InBuffer[IN_BUF_SZ];          // 0x100 bytes in size
-    uint8_t  ch341OutBuffer[EEPROM_READ_BULKOUT_BUF_SZ];
 
     ret = libusb_init(NULL);
     if(ret < 0) {
@@ -165,10 +163,11 @@ int32_t ch341readEEPROM(struct libusb_device_handle *devHandle, uint8_t *buffer,
 
     uint8_t ch341outBuffer[EEPROM_READ_BULKOUT_BUF_SZ];
     uint8_t ch341inBuffer[IN_BUF_SZ];               // 0x100 bytes
-    int32_t ret = 0, i, exitflag = 0, readpktcount;
-    uint32_t actuallen = 0;
+    int32_t ret = 0, readpktcount = 0;
     struct libusb_transfer *xferBulkIn, *xferBulkOut;
     struct timeval tv = {0, 100};                   // our async polling interval
+
+    byteoffset = 0;
 
     xferBulkIn  = libusb_alloc_transfer(0);
     xferBulkOut = libusb_alloc_transfer(0);
@@ -197,8 +196,6 @@ int32_t ch341readEEPROM(struct libusb_device_handle *devHandle, uint8_t *buffer,
     fprintf(debugout, "Submitted BULK OUT setup packet\n");
 
     readbuf = buffer;
-
-    byteoffset = 0;
 
     while (byteoffset < bytestoread) {
         fprintf(stdout, "Read [%d] of [%d] bytes      \r", byteoffset, bytestoread);
