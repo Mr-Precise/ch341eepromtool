@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     static char version_msg[] =    
         "ch341eeprom - an i2c EEPROM programming tool for the WCH CH341a IC\n" \
         "Version " CH341TOOLVERSION  " copyright (c) 2011  asbokid <ballymunboy@gmail.com>\n\n" \
-        "This program comes with asbolutely no warranty; This is free software,\n" \
+        "This program comes with absolutely no warranty; This is free software,\n" \
         "and you are welcome to redistribute it under certain conditions:\n" \
         "GNU GPL v3 License: http://www.gnu.org/licenses/gpl.html\n";
 
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
     fprintf(verbout, "Configured USB device %04x:%04x\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
 
     if(ch341setstream(devHandle, CH341_I2C_STANDARD_SPEED) < 0) {
-        fprintf(stderr, "Couldnt set i2c bus speed\n");
+        fprintf(stderr, "Couldn't set i2c bus speed\n");
         goto shutdown;
     }
     fprintf(verbout, "Set i2c bus speed to [100kHz]\n");
@@ -233,4 +233,3 @@ shutdown:
     }
     return 0;
 }
-

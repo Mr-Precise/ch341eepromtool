@@ -53,7 +53,7 @@ struct libusb_device_handle *ch341configure(uint16_t vid, uint16_t pid) {
 
     ret = libusb_init(NULL);
     if(ret < 0) {
-        fprintf(stderr, "Couldnt initialise libusb\n");
+        fprintf(stderr, "Couldn't initialise libusb\n");
         return NULL;
     }
 
@@ -72,7 +72,7 @@ struct libusb_device_handle *ch341configure(uint16_t vid, uint16_t pid) {
     }
  
     if(!(dev = libusb_get_device(devHandle))) {
-        fprintf(stderr, "Couldnt get bus number and address of device\n");
+        fprintf(stderr, "Couldn't get bus number and address of device\n");
         return NULL;
     }
 
@@ -80,7 +80,6 @@ struct libusb_device_handle *ch341configure(uint16_t vid, uint16_t pid) {
         libusb_get_device_address(dev), libusb_get_bus_number(dev));
 
     fprintf(verbout, "Opened device [%04x:%04x]\n", USB_LOCK_VENDOR, USB_LOCK_PRODUCT);
-
 
     if(libusb_kernel_driver_active(devHandle, DEFAULT_INTERFACE)) {
         ret = libusb_detach_kernel_driver(devHandle, DEFAULT_INTERFACE);
@@ -131,7 +130,6 @@ struct libusb_device_handle *ch341configure(uint16_t vid, uint16_t pid) {
     return devHandle;
 }
 
-
 // --------------------------------------------------------------------------
 //  ch341setstream()  
 //      set the i2c bus speed (speed: 0 = 20kHz; 1 = 100kHz, 2 = 400kHz, 3 = 750kHz)
@@ -177,7 +175,7 @@ int32_t ch341readEEPROM(struct libusb_device_handle *devHandle, uint8_t *buffer,
     xferBulkOut = libusb_alloc_transfer(0);
 
     if(!xferBulkIn || !xferBulkOut) {
-        fprintf(stderr, "Couldnt allocate USB transfer structures\n");
+        fprintf(stderr, "Couldn't allocate USB transfer structures\n");
         return -1;
     }
 
@@ -190,7 +188,7 @@ int32_t ch341readEEPROM(struct libusb_device_handle *devHandle, uint8_t *buffer,
         EEPROM_READ_BULKIN_BUF_SZ, cbBulkIn, NULL, DEFAULT_TIMEOUT);
 
     libusb_fill_bulk_transfer(xferBulkOut, devHandle, BULK_WRITE_ENDPOINT, 
-        ch341outBuffer, EEPROM_READ_BULKOUT_BUF_SZ,cbBulkOut, NULL, DEFAULT_TIMEOUT);
+        ch341outBuffer, EEPROM_READ_BULKOUT_BUF_SZ, cbBulkOut, NULL, DEFAULT_TIMEOUT);
 
     fprintf(debugout, "Filled USB transfer structures\n");
 
@@ -203,13 +201,13 @@ int32_t ch341readEEPROM(struct libusb_device_handle *devHandle, uint8_t *buffer,
 
     while (byteoffset < bytestoread) {
         fprintf(stdout, "Read [%d] of [%d] bytes      \r", byteoffset, bytestoread);
-		ret = libusb_handle_events_timeout(NULL, &tv);
+        ret = libusb_handle_events_timeout(NULL, &tv);
 
 		if (ret < 0 || getnextpkt == -1) {          // indicates an error
             fprintf(stderr, "ret from libusb_handle_timeout = %d\n", ret);
             fprintf(stderr, "getnextpkt = %d\n", getnextpkt);
             fprintf(stderr, "USB read error : %s\n", strerror(-ret));
-			goto out_deinit;
+            goto out_deinit;
         }
         if(getnextpkt == 1) {                       // callback function reports a new BULK IN packet received
             getnextpkt = 0;                         //   reset the flag
@@ -236,7 +234,7 @@ int32_t ch341readEEPROM(struct libusb_device_handle *devHandle, uint8_t *buffer,
                                                     // and re-submit next transfer request to BULK OUT endpoint
             }
         }
-	}
+    }
 
 out_deinit:
     libusb_free_transfer(xferBulkIn);
@@ -267,7 +265,7 @@ void cbBulkIn(struct libusb_transfer *transfer) {
             fprintf(stderr, "\ncbBulkIn: error : %d\n", transfer->status);
             getnextpkt = -1;
     }
-	return; 
+    return; 
 }
 
 // Callback function for async bulk out comms
@@ -354,7 +352,6 @@ int32_t ch341writeEEPROM(struct libusb_device_handle *devHandle, uint8_t *buffer
     }
     return 0;   
 } 
-
 
 // --------------------------------------------------------------------------
 // parseEEPsize()
