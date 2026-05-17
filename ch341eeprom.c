@@ -19,7 +19,7 @@
 //   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <libusb-1.0/libusb.h> 
-#include <asm/errno.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -27,6 +27,12 @@
 #include <inttypes.h>
 #include <getopt.h>
 #include "ch341eeprom.h"
+
+#ifdef _WIN32
+#define NULL_DEVICE "nul"
+#else
+#define NULL_DEVICE "/dev/null"
+#endif
 
 FILE *debugout, *verbout;
 uint8_t *readbuf = NULL;
@@ -115,8 +121,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    debugout = (debug == TRUE) ? stdout : fopen("/dev/null","w");
-    verbout = (verbose == TRUE) ? stdout : fopen("/dev/null","w");
+    debugout = (debug == TRUE) ? stdout : fopen(NULL_DEVICE,"w");
+    verbout = (verbose == TRUE) ? stdout : fopen(NULL_DEVICE,"w");
     fprintf(debugout, "Debug Enabled\n"); 
 
     if(!operation) {        
